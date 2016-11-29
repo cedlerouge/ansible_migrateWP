@@ -1,0 +1,83 @@
+#
+# Import wordpress from prod to preprod or preprod to prod
+#
+
+---
+# check remote url
+- name: check remoteurl
+  hosts: local
+  gather_facts: False
+  tasks:
+    - name: check remoteurl
+      get_url:
+        url: "{{ sitedomain }}"
+        dest: /dev/null
+    - name: dump local db
+      mysql_db:
+        state: dump
+        name: "{{ dbname }}"
+        login_user: root
+        login_password: ced
+        target: "{{ userdir }}/local_{{ dbname }}.sql"
+
+# backup distant 
+- name: backup remote data
+  hosts: remote
+  gather_facts: False
+  tasks:
+    - name: dumb remote db
+      mysql_db:
+        state: dump
+        name: "{{ dbname }}"
+        target: "/{{ userdir }}/remote_{{ dbname }}.sql"
+
+    - name: backup remote web dir
+      command: /usr/bin/rsync --dry-run -aHWS --delete "{{ webdir }}/" "{{ webdir }}.bkp/"
+
+#- name: wait backup is done
+#  hosts: local
+#  wait_for: host={{ remote.ip_addr }} port=22 state=drained
+
+    - name: synchronize local and remote
+      synchronize:
+        src: "{{ hostvars['local']['webdir'] }}"
+        dest: "{{ webdir }}"
+        copy_links: yes
+        delete: yes
+#        rsync_opts:
+#          - "--no-motd"
+
+    - name: push local db to remote
+      synchronize:
+        src: "{{ hostvars['local']['userdir'] }}/local_{{ hostvars['local']['dbname'] }}.sql"
+        dest: "{{ userdir }}/local_{{ dbname }}.sql"
+#        rsync_opts:
+#          - "--no-motd"
+
+    - name: drop remote db
+      mysql_db:
+        name: "{{ dbname }}"
+        state: absent
+
+    - name: create remote db
+      mysql_db:
+        name: "{{ dbname }}"
+        state: present
+
+    - name: import local db on remote server
+      mysql_db:
+        name: "{{ dbname }}"
+        state: import
+        target: "{{ userdir }}/local_{{ dbname }}.sql"
+
+    - name: import sql migration script
+      template:
+        src: template/migrateWP.sql.j2
+        dest: "{{ userdir }}/migrateWP.sql"
+
+    - name: execute sql migration script
+      mysql_db:
+        name: "{{ dbname }}"
+        state: import
+        target: "{{ userdir }}/migrateWP.sql"
+

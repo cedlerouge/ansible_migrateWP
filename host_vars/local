@@ -1,0 +1,7 @@
+---
+userdir: /var/www/html
+webdir: /var/www/html/entraid.com
+ip_addr: 172.16.29.204
+dbname: prod_entraid
+sitedomain: preprod.entraid.com
+
