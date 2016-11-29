@@ -1,0 +1,80 @@
+#
+# Import wordpress from prod to preprod or preprod to prod
+#
+
+---
+# check remote url
+- name: check remoteurl
+  hosts: local
+  gather_facts: False
+  tasks:
+    - name: check remoteurl
+      get_url:
+        url: "{{ sitedomain }}"
+        dest: /dev/null
+    - name: dump local db
+      mysql_db:
+        state: dump
+        name: "{{ dbname }}"
+        login_user: root
+        login_password: ced
+        target: "{{ userdir }}/local_{{ dbname }}.sql"
+
+# backup distant 
+- name: backup remote data
+  hosts: remote
+  tasks:
+    - name: dumb remote db
+      mysql_db:
+        state: dump
+        name: "{{ dbname }}"
+        target: "/{{ userdir }}/remote_{{ dbname }}.sql"
+
+    - name: backup remote web dir
+      command: /usr/bin/rsync --dry-run -aHWS --delete "{{ webdir }}/" "{{ webdir }}.bkp/"
+
+#- name: wait backup is done
+#  hosts: local
+#  wait_for: host={{ remote.ip_addr }} port=22 state=drained
+
+    - name: synchronize local and remote
+      synchronize:
+        src: "{{ hostvars['local']['webdir'] }}"
+        dest: "{{ webdir }}"
+        copy_links: yes
+        delete: yes
+
+    - name: push local db to remote
+      synchronize:
+        src: "{{ hostvars['local']['userdir'] }}/local_{{ hostvars['local']['dbname'] }}.sql"
+        dest: "{{ userdir }}/local_{{ dbname }}.sql"
+
+    - name: drop remote db
+      mysql_db:
+        name: remote.dbname
+        state: absent
+
+    - name: create remote db
+      mysql_db:
+        name: remote.dbname
+    - name: import local db on remote server
+      mysql_db:
+        name: remote.dbname
+        state: import
+        target: "{{ userdir }}/local_{{ dbname }}.sql"
+
+# https://wpformation.com/deplacer-wordpress-nom-domaine/
+# UPDATE wp_options SET option_value = replace(option_value, 'http://www.ancien-domain.com', 'http:/www.nouveau-domaine.com') WHERE option_name = 'home' OR option_name = 'siteurl';
+    - name: update site url in remote wp db
+      debug:
+        msg: "UPDATE wp_options SET option_value = replace(option_value, '{{ local.sitedomain }}', '{{ remote.sitedomain }}') WHERE option_name = 'home' OR option_name = '{{ local.sitedomain }}'"
+
+# UPDATE wp_posts SET guid = replace(guid, 'http://www.ancien-domaine.com','http://www.nouveau-domaine.com');
+    - name: update page url in remote wp db
+      debug:
+        msg: "UPDATE wp_posts SET guid = replace(guid, '{{ local.sitedomain }}' '{{ remote.sitedomain }}');"
+
+# UPDATE wp_posts SET post_content = replace(post_content, 'http://www.ancien-domaine.com', 'http://www.nouveau-domaine.com');
+    - name: update internal link in remote wp db
+      debug:
+        msg: "UPDATE wp_posts SET post_content = replace(post_content, '{{ local.sitedomain }}' '{{ remote.sitedomain }}');"
