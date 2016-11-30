@@ -4,14 +4,10 @@
 
 ---
 # check remote url
-- name: check remoteurl
+- name: local tasks
   hosts: local
   gather_facts: False
   tasks:
-    - name: check remoteurl
-      get_url:
-        url: "{{ sitedomain }}"
-        dest: /dev/null
     - name: dump local db
       mysql_db:
         state: dump
@@ -21,11 +17,11 @@
         target: "{{ userdir }}/local_{{ dbname }}.sql"
 
 # backup distant 
-- name: backup remote data
+- name: remote tasks
   hosts: remote
   gather_facts: False
   tasks:
-    - name: dumb remote db
+    - name: dump remote db
       mysql_db:
         state: dump
         name: "{{ dbname }}"
