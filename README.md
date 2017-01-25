@@ -6,3 +6,8 @@ This small playbook aims to migrate wordpress site from production to pre-produc
 * synchronise local and remote file 
 * overwrite remote database with the local dump db
 * update the remote database with the remote domain
+
+## Usage
+```
+    ansible­playbook ­i ./hosts playbook.yml
+```
